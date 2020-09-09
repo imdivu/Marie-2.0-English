@@ -13,8 +13,10 @@ AFK_GROUP = 7
 AFK_REPLY_GROUP = 8
 
 
+
 @run_async
 def afk(bot: Bot, update: Update):
+    chat = update.effective_chat  # type: Optional[Chat]
     args = update.effective_message.text.split(None, 1)
     if len(args) >= 2:
         reason = args[1]
@@ -22,49 +24,99 @@ def afk(bot: Bot, update: Update):
         reason = ""
 
     sql.set_afk(update.effective_user.id, reason)
-    update.effective_message.reply_text("{} is away from the keyboard ! ".format(update.effective_user.first_name))
+    fname = update.effective_user.first_name
+    update.effective_message.reply_text("{} is now away!".format(fname))
 
-
+    
 @run_async
 def no_longer_afk(bot: Bot, update: Update):
     user = update.effective_user  # type: Optional[User]
+    chat = update.effective_chat  # type: Optional[Chat]
+    message = update.effective_message  # type: Optional[Message]
 
     if not user:  # ignore channels
         return
 
     res = sql.rm_afk(user.id)
     if res:
-        update.effective_message.reply_text("{} Not far from the keyboard now !".format(update.effective_user.first_name))
+        if message.new_chat_members:  #dont say msg
+            return
+        firstname = update.effective_user.first_name
+        try:        
+            options = [
+          
+            '{} is back online!'
+     
+                    ]
+            chosen_option = random.choice(options)
+            update.effective_message.reply_text(chosen_option.format(firstname))
+        except:
+            return
 
 
 @run_async
 def reply_afk(bot: Bot, update: Update):
     message = update.effective_message  # type: Optional[Message]
-    if message.entities and message.parse_entities([MessageEntity.TEXT_MENTION, MessageEntity.MENTION]):
-        entities = message.parse_entities([MessageEntity.TEXT_MENTION, MessageEntity.MENTION])
+    userc = update.effective_user  # type: Optional[User]
+    userc_id = userc.id
+    if message.entities and message.parse_entities(
+        [MessageEntity.TEXT_MENTION, MessageEntity.MENTION]):
+        entities = message.parse_entities(
+            [MessageEntity.TEXT_MENTION, MessageEntity.MENTION])
+
+        chk_users = []
         for ent in entities:
             if ent.type == MessageEntity.TEXT_MENTION:
                 user_id = ent.user.id
                 fst_name = ent.user.first_name
 
-            elif ent.type == MessageEntity.MENTION:
-                user_id = get_user_id(message.text[ent.offset:ent.offset + ent.length])
+                if user_id in chk_users:
+                    return
+                chk_users.append(user_id)
+                
+            if ent.type == MessageEntity.MENTION:
+                user_id = get_user_id(message.text[ent.offset:ent.offset +
+                                                   ent.length])
                 if not user_id:
                     # Should never happen, since for a user to become AFK they must have spoken. Maybe changed username?
                     return
-                chat = bot.get_chat(user_id)
+                
+                if user_id in chk_users:
+                    return
+                chk_users.append(user_id)
+
+                try:
+                    chat = bot.get_chat(user_id)
+                except BadRequest:
+                    print("Error: Could not fetch userid {} for AFK module".
+                          format(user_id))
+                    return
                 fst_name = chat.first_name
 
             else:
                 return
 
-            if sql.is_afk(user_id):
-                user = sql.check_afk_status(user_id)
-                if not user.reason:
-                    res = "{} is away from the keyboard ! reason :\n{} ".format(fst_name)
-                else:
-                    res = "{} is away from the keyboard ! reason :\n{}. ".format(fst_name, user.reason)
-                message.reply_text(res)
+            check_afk(bot, update, user_id, fst_name, userc_id)
+            
+    elif message.reply_to_message:
+        user_id = message.reply_to_message.from_user.id
+        fst_name = message.reply_to_message.from_user.first_name
+        check_afk(bot, update, user_id, fst_name, userc_id)
+
+
+def check_afk(bot, update, user_id, fst_name, userc_id):
+    chat = update.effective_chat  # type: Optional[Chat]
+    if sql.is_afk(user_id):
+        user = sql.check_afk_status(user_id)
+        if not user.reason:
+            if int(userc_id) == int(user_id):
+                return
+            res = "{} is afk".format(fst_name)
+            update.effective_message.reply_text(res)
+        else:
+            if int(userc_id) == int(user_id):
+                return
+    
 
 
 __help__ = """
