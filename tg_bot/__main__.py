@@ -24,7 +24,7 @@ im a group manager bot maintained by  [this person](tg://user?id={}).
 
 HELP_STRINGS = """
 
-Hello! my name *{}*.
+Hello!! my name *{}*.
 
 *Main* available commands:
  - /start: Start the bot...
